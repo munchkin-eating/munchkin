@@ -1,0 +1,17 @@
+{
+    "Item X": {
+        "price": 69,
+        "stock": 2,
+        "description": "i loev rohan"
+    },
+    "Item Y": {
+        "price": 420,
+        "stock": 0,
+        "description": "i love rohan"
+    },
+    "Item Z": {
+        "price": 200,
+        "stock": 66,
+        "description": "WAAAAAAAAAAAAAAAAAAAAAAAAAaa"
+    }
+}
