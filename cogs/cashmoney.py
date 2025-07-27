@@ -17,7 +17,7 @@ ARCHIVE_CATEGORY_NAME = "Archive"
 STAFF_CHANNEL_ID = 1398173714733862942
 PERSISTENT_MESSAGE_CHANNEL_ID = 1398181590902767626
 PERSISTENT_MESSAGE_ID_FILE = "ticket_button_message_id.txt" 
-NOTIFY_CHANNEL_ID = 1398698611935809626  
+NOTIFY_CHANNEL_ID = 1398979639870881912
 
 ORDER_QUEUE_FILE = "order_queue.txt" # Add a global queue counter
 
@@ -53,7 +53,15 @@ def get_next_queue_number():
 
 def register_queue(user_id, code, status="pending"):
     queue_info = load_queue_info()
-    number = len(queue_info) + 1
+    # Ensure queue code is unique
+    if any(q["code"] == code for q in queue_info):
+        # If code exists, generate a new one recursively
+        return register_queue(user_id, generate_dynamic_queue(), status)
+    # Find the lowest available number (fill gaps if any)
+    used_numbers = {q["number"] for q in queue_info}
+    number = 1
+    while number in used_numbers:
+        number += 1
     queue_info.append({
         "code": code,
         "number": number,
@@ -62,14 +70,6 @@ def register_queue(user_id, code, status="pending"):
     })
     save_queue_info(queue_info)
     return number
-
-def update_queue_status(code, status):
-    queue_info = load_queue_info()
-    for q in queue_info:
-        if q["code"] == code:
-            q["status"] = status
-            break
-    save_queue_info(queue_info)
 
 def get_queue_number_by_code(code):
     queue_info = load_queue_info()
@@ -84,6 +84,14 @@ def get_queue_status_by_code(code):
         if q["code"] == code:
             return q["status"]
     return "pending"
+
+def update_queue_status(code, status):
+    queue_info = load_queue_info()
+    for q in queue_info:
+        if q["code"] == code:
+            q["status"] = status
+            break
+    save_queue_info(queue_info)
 
 # ...existing code...
 
@@ -107,13 +115,13 @@ class ConfirmPaymentView(discord.ui.View):
         )
         await self.ticket_channel.send(
             f"{self.user.mention} your payment has been confirmed by {staff.mention}! God bless you!!\n"
-            f"Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
+            f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
         )
         try:
             await self.user.send(
                 f"Your payment for **{self.item_name or 'your item'}** has been confirmed by {staff.mention}!\n"
                 f"Thank you for your purchase. God bless you!\n"
-                f"Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
+                f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
             )
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
@@ -139,13 +147,13 @@ class ConfirmPaymentView(discord.ui.View):
         await self.ticket_channel.send(
             f"{self.user.mention} your payment for {self.item_name} was **rejected** by {staff.mention}.\n"
             f"Please try `/confirm` again with a valid screenshot, or your ticket will expire and be archived within 15 minutes.\n"
-            f"Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
+            f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
         )
         try:
             await self.user.send(
                 f"Your payment for **{self.item_name or 'your item'}** was rejected by {staff.mention}.\n"
                 f"Please try `/confirm` again with a valid screenshot, or your ticket will expire and be archived within 15 minutes.\n"
-                f"Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
+                f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
             )
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
@@ -161,13 +169,13 @@ class ConfirmPaymentView(discord.ui.View):
         await self.ticket_channel.send(
             f"{self.user.mention} your payment for {self.item_name} is now **being processed** by {staff.mention}.\n"
             f"Please wait while your order is handled.\n"
-            f"Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
+            f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
         )
         try:
             await self.user.send(
                 f"Your payment for **{self.item_name or 'your item'}** is now being processed by {staff.mention}.\n"
                 f"Please wait while your order is handled.\n"
-                f"Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
+                f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
             )
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
@@ -374,8 +382,9 @@ class Cashmoney(commands.Cog, name="cashmoney"):
 
         staff_channel = ctx.guild.get_channel(STAFF_CHANNEL_ID)
         if staff_channel:
+            role_mention = f"<@&1398978392744792084>" # ORDER HANDLER ROLE ID
             embed = discord.Embed(
-                title="GCash Payment Confirmation",
+                title=f"GCash Payment Confirmation",
                 description=(
                     f"{requester.mention} submitted a payment in {ctx.channel.mention}\n"
                     f"Item: **{item_name}**\n"
@@ -388,7 +397,8 @@ class Cashmoney(commands.Cog, name="cashmoney"):
             embed.set_image(url=image_url)
             await staff_channel.send(
                 embed=embed,
-                view=ConfirmPaymentView(requester, ctx.channel, image_url, item_name, queue_code)
+                view=ConfirmPaymentView(requester, ctx.channel, image_url, item_name, queue_code),
+                content=role_mention
             )
             await ctx.reply("Screenshot sent to the staff for confirmation.")
         else:

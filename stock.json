@@ -31,12 +31,12 @@
     },
     "Item D": {
         "price": 300,
-        "stock": 18,
+        "stock": 5,
         "description": "Sample item D"
     },
     "Item E": {
         "price": 120,
-        "stock": 75,
+        "stock": 6,
         "description": "Sample item E"
     },
     "Item F": {
@@ -56,7 +56,7 @@
     },
     "Item I": {
         "price": 80,
-        "stock": 90,
+        "stock": 89,
         "description": "Sample item I"
     },
     "Item J": {
