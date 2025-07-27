@@ -6,6 +6,7 @@ import json
 import os
 import time
 import random
+import string
 
 STOCK_FILE = "stock.json" # Path to your itemlist
 GCASH_NUMBER = "09610617355" # Gcash number for payments
@@ -40,6 +41,11 @@ def get_next_queue_number():
         f.truncate()
         return num
 
+def generate_dynamic_queue():
+    # Generates a queue string like "A1B2C3" using random letters and digits
+    chars = string.ascii_uppercase + string.digits
+    return ''.join(random.choices(chars, k=6))
+
 class ConfirmPaymentView(discord.ui.View):
     def __init__(self, user: discord.User, ticket_channel: discord.TextChannel, image_url=None, item_name=None, queue_number=None):
         super().__init__(timeout=300)
@@ -57,13 +63,13 @@ class ConfirmPaymentView(discord.ui.View):
         )
         await self.ticket_channel.send(
             f"{self.user.mention} your payment has been confirmed by {staff.mention}! God bless you!!\n"
-            f"Your queue/order number is **#{self.queue_number}**."
+            f"Your queue/order code is `{self.queue_number}`."
         )
         try:
             await self.user.send(
                 f"Your payment for **{self.item_name or 'your item'}** has been confirmed by {staff.mention}!\n"
                 f"Thank you for your purchase. God bless you!\n"
-                f"Your queue/order number is **#{self.queue_number}**."
+                f"Your queue/order code is `{self.queue_number}`."
             )
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
@@ -87,13 +93,13 @@ class ConfirmPaymentView(discord.ui.View):
         await self.ticket_channel.send(
             f"{self.user.mention} your payment for {self.item_name} was **rejected** by {staff.mention}.\n"
             f"Please try `/confirm` again with a valid screenshot, or your ticket will expire and be archived within 15 minutes.\n"
-            f"Your queue/order number is **#{self.queue_number}**."
+            f"Your queue/order code is `{self.queue_number}`."
         )
         try:
             await self.user.send(
                 f"Your payment for **{self.item_name or 'your item'}** was rejected by {staff.mention}.\n"
                 f"Please try `/confirm` again with a valid screenshot, or your ticket will expire and be archived within 15 minutes.\n"
-                f"Your queue/order number is **#{self.queue_number}**."
+                f"Your queue/order code is `{self.queue_number}`."
             )
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
@@ -107,13 +113,13 @@ class ConfirmPaymentView(discord.ui.View):
         await self.ticket_channel.send(
             f"{self.user.mention} your payment for {self.item_name} is now **being processed** by {staff.mention}.\n"
             f"Please wait while your order is handled.\n"
-            f"Your queue/order number is **#{self.queue_number}**."
+            f"Your queue/order code is `{self.queue_number}`."
         )
         try:
             await self.user.send(
                 f"Your payment for **{self.item_name or 'your item'}** is now being processed by {staff.mention}.\n"
                 f"Please wait while your order is handled.\n"
-                f"Your queue/order number is **#{self.queue_number}**."
+                f"Your queue/order code is `{self.queue_number}`."
             )
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
@@ -243,11 +249,12 @@ class Cashmoney(commands.Cog, name="cashmoney"):
             reason=f"Ticket channel for {requester}"
         )
 
-        queue_number = get_next_queue_number()
+        # Use dynamic queue string instead of numeric
+        queue_number = generate_dynamic_queue()
 
         notify_channel = guild.get_channel(NOTIFY_CHANNEL_ID)
         if notify_channel:
-            await notify_channel.send(f"{requester.mention}, you have created your ticket channel at {new_channel.mention} (Queue #{queue_number})")
+            await notify_channel.send(f"{requester.mention}, you have created your ticket channel at {new_channel.mention} (Queue `{queue_number}`)")
 
         stock = load_stock()
         embed = discord.Embed(
@@ -262,7 +269,7 @@ class Cashmoney(commands.Cog, name="cashmoney"):
             )
         embed.add_field(
             name="Order Instructions",
-            value=f"{requester.name}, send payment to `{GCASH_NUMBER}` after choosing below.\nThis ticket will explode in 15 minutes.\nQueue/Order Number: #{queue_number}",
+            value=f"{requester.name}, send payment to `{GCASH_NUMBER}` after choosing below.\nThis ticket will explode in 15 minutes.\nQueue/Order Code: `{queue_number}`",
             inline=False
         )
         await new_channel.send(
@@ -274,7 +281,7 @@ class Cashmoney(commands.Cog, name="cashmoney"):
             f"{requester.mention}, your order ticket has been created! Please select an item above to start your order."
         )
         await new_channel.send(file=discord.File("assets/QR.jpg"))
-        # Store queue number for later use in confirm
+        # Store queue code for later use in confirm
         if not hasattr(self.bot, "queue_numbers"):
             self.bot.queue_numbers = {}
         self.bot.queue_numbers[requester.id] = queue_number
@@ -315,7 +322,7 @@ class Cashmoney(commands.Cog, name="cashmoney"):
                     f"Item: **{item_name}**\n"
                     f"Quantity: **{quantity}**\n"
                     f"Total: **₱{total_price}**\n"
-                    f"Queue/Order Number: **#{queue_number}**"
+                    f"Queue/Order Code: `{queue_number}`"
                 ),
                 color=discord.Color.green()
             )
