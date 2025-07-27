@@ -31,7 +31,7 @@
     },
     "Item D": {
         "price": 300,
-        "stock": 5,
+        "stock": 4,
         "description": "Sample item D"
     },
     "Item E": {
@@ -56,7 +56,7 @@
     },
     "Item I": {
         "price": 80,
-        "stock": 89,
+        "stock": 81,
         "description": "Sample item I"
     },
     "Item J": {
@@ -66,7 +66,7 @@
     },
     "Item K": {
         "price": 500,
-        "stock": 10,
+        "stock": 2,
         "description": "Sample item K"
     },
     "Item L": {

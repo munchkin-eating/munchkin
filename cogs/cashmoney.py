@@ -107,19 +107,19 @@ class ConfirmPaymentView(discord.ui.View):
 
     @discord.ui.button(label="Confirm Payment", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        staff = interaction.user
+        staff = interaction.user.display_name
         update_queue_status(self.queue_code, "confirmed")
         queue_number = get_queue_number_by_code(self.queue_code)
         await interaction.response.send_message(
-            f"Payment confirmed by {staff.mention}. <3", ephemeral=False
+            f"Payment confirmed by {staff}. <3", ephemeral=False
         )
         await self.ticket_channel.send(
-            f"{self.user.mention} your payment has been confirmed by {staff.mention}! God bless you!!\n"
+            f"{self.user.mention} your payment has been confirmed by {staff}! God bless you!!\n"
             f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
         )
         try:
             await self.user.send(
-                f"Your payment for **{self.item_name or 'your item'}** has been confirmed by {staff.mention}!\n"
+                f"Your payment for **{self.item_name or 'your item'}** has been confirmed by {staff}!\n"
                 f"Thank you for your purchase. God bless you!\n"
                 f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
             )
@@ -142,16 +142,16 @@ class ConfirmPaymentView(discord.ui.View):
         update_queue_status(self.queue_code, "rejected")
         queue_number = get_queue_number_by_code(self.queue_code)
         await interaction.response.send_message(
-            f"Order at {self.ticket_channel.mention} was rejected by {staff.mention}.", ephemeral=False
+            f"Order at {self.ticket_channel.mention} was rejected by {staff}.", ephemeral=False
         )
         await self.ticket_channel.send(
-            f"{self.user.mention} your payment for {self.item_name} was **rejected** by {staff.mention}.\n"
+            f"{self.user.mention} your payment for {self.item_name} was **rejected** by {staff}.\n"
             f"Please try `/confirm` again with a valid screenshot, or your ticket will expire and be archived within 15 minutes.\n"
             f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
         )
         try:
             await self.user.send(
-                f"Your payment for **{self.item_name or 'your item'}** was rejected by {staff.mention}.\n"
+                f"Your payment for **{self.item_name or 'your item'}** was rejected by {staff}.\n"
                 f"Please try `/confirm` again with a valid screenshot, or your ticket will expire and be archived within 15 minutes.\n"
                 f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
             )
@@ -164,10 +164,10 @@ class ConfirmPaymentView(discord.ui.View):
         update_queue_status(self.queue_code, "processing")
         queue_number = get_queue_number_by_code(self.queue_code)
         await interaction.response.send_message(
-            f"Order at {self.ticket_channel.mention} is now being processed by {staff.mention}.", ephemeral=False
+            f"Order at {self.ticket_channel.mention} is now being processed by {staff}.", ephemeral=False
         )
         await self.ticket_channel.send(
-            f"{self.user.mention} your payment for {self.item_name} is now **being processed** by {staff.mention}.\n"
+            f"{self.user.mention} your payment for {self.item_name} is now **being processed** by {staff}.\n"
             f"Please wait while your order is handled.\n"
             f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
         )
@@ -180,9 +180,12 @@ class ConfirmPaymentView(discord.ui.View):
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
         # Remove ticket timeout by cancelling the delete task if possible
-        if hasattr(self.ticket_channel, "ticket_timeout_task") and self.ticket_channel.ticket_timeout_task:
-            self.ticket_channel.ticket_timeout_task.cancel()
-            await self.ticket_channel.send("Ticket timeout has been removed. This ticket will remain open until manually archived.")
+        bot = interaction.client
+        if hasattr(bot, "ticket_timeout_tasks"):
+            task = bot.ticket_timeout_tasks.get(self.ticket_channel.id)
+            if task:
+                task.cancel()
+                await self.ticket_channel.send("Ticket timeout has been removed. This ticket will remain open until manually archived.")
 
 class ItemButton(discord.ui.Button):
     # List of pastel hex color codes for buttons
@@ -352,7 +355,10 @@ class Cashmoney(commands.Cog, name="cashmoney"):
         async def ticket_timeout():
             await asyncio.sleep(TICKET_TIMEOUT)
             await new_channel.delete(reason="Ticket expired")
-        new_channel.ticket_timeout_task = asyncio.create_task(ticket_timeout())
+        # Instead of attaching to the channel, store in a dict on the cog/bot
+        if not hasattr(self.bot, "ticket_timeout_tasks"):
+            self.bot.ticket_timeout_tasks = {}
+        self.bot.ticket_timeout_tasks[new_channel.id] = asyncio.create_task(ticket_timeout())
 
     @commands.hybrid_command(name="confirm", description="Confirm your payment by uploading your screenshot")
     @discord.app_commands.describe(screenshot="Upload your GCash screenshot")
@@ -450,7 +456,6 @@ class TicketButtonView(discord.ui.View):
         ctx = await self.bot.get_context(interaction.message)
         ctx.author = interaction.user
         await self.bot.get_cog("cashmoney").ticket(ctx)
-        await interaction.response.defer()
 
 async def setup(bot) -> None:
     await bot.add_cog(Cashmoney(bot))
