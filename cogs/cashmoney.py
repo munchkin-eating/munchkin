@@ -21,6 +21,9 @@ NOTIFY_CHANNEL_ID = 1398698611935809626
 
 ORDER_QUEUE_FILE = "order_queue.txt" # Add a global queue counter
 
+# Store queue info as a list of dicts: [{code, number, user_id, status}]
+QUEUE_INFO_FILE = "queue_info.json"
+
 def load_stock():
     with open(STOCK_FILE, "r") as f:
         return json.load(f)
@@ -29,47 +32,88 @@ def save_stock(stock):
     with open(STOCK_FILE, "w") as f:
         json.dump(stock, f, indent=4)
 
-def get_next_queue_number():
-    if not os.path.exists(ORDER_QUEUE_FILE):
-        with open(ORDER_QUEUE_FILE, "w") as f:
-            f.write("1")
-        return 1
-    with open(ORDER_QUEUE_FILE, "r+") as f:
-        num = int(f.read().strip())
-        f.seek(0)
-        f.write(str(num + 1))
-        f.truncate()
-        return num
+def load_queue_info():
+    if not os.path.exists(QUEUE_INFO_FILE):
+        return []
+    with open(QUEUE_INFO_FILE, "r") as f:
+        return json.load(f)
+
+def save_queue_info(queue_info):
+    with open(QUEUE_INFO_FILE, "w") as f:
+        json.dump(queue_info, f, indent=4)
 
 def generate_dynamic_queue():
     # Generates a queue string like "A1B2C3" using random letters and digits
     chars = string.ascii_uppercase + string.digits
     return ''.join(random.choices(chars, k=6))
 
+def get_next_queue_number():
+    queue_info = load_queue_info()
+    return len(queue_info) + 1
+
+def register_queue(user_id, code, status="pending"):
+    queue_info = load_queue_info()
+    number = len(queue_info) + 1
+    queue_info.append({
+        "code": code,
+        "number": number,
+        "user_id": user_id,
+        "status": status
+    })
+    save_queue_info(queue_info)
+    return number
+
+def update_queue_status(code, status):
+    queue_info = load_queue_info()
+    for q in queue_info:
+        if q["code"] == code:
+            q["status"] = status
+            break
+    save_queue_info(queue_info)
+
+def get_queue_number_by_code(code):
+    queue_info = load_queue_info()
+    for q in queue_info:
+        if q["code"] == code:
+            return q["number"]
+    return None
+
+def get_queue_status_by_code(code):
+    queue_info = load_queue_info()
+    for q in queue_info:
+        if q["code"] == code:
+            return q["status"]
+    return "pending"
+
+# ...existing code...
+
 class ConfirmPaymentView(discord.ui.View):
-    def __init__(self, user: discord.User, ticket_channel: discord.TextChannel, image_url=None, item_name=None, queue_number=None):
+    def __init__(self, user: discord.User, ticket_channel: discord.TextChannel, image_url=None, item_name=None, queue_code=None):
         super().__init__(timeout=300)
         self.user = user
         self.ticket_channel = ticket_channel
         self.image_url = image_url
         self.item_name = item_name
-        self.queue_number = queue_number
+        self.queue_code = queue_code
+        self.ticket_timeout_task = None
 
     @discord.ui.button(label="Confirm Payment", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         staff = interaction.user
+        update_queue_status(self.queue_code, "confirmed")
+        queue_number = get_queue_number_by_code(self.queue_code)
         await interaction.response.send_message(
             f"Payment confirmed by {staff.mention}. <3", ephemeral=False
         )
         await self.ticket_channel.send(
             f"{self.user.mention} your payment has been confirmed by {staff.mention}! God bless you!!\n"
-            f"Your queue/order code is `{self.queue_number}`."
+            f"Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
         )
         try:
             await self.user.send(
                 f"Your payment for **{self.item_name or 'your item'}** has been confirmed by {staff.mention}!\n"
                 f"Thank you for your purchase. God bless you!\n"
-                f"Your queue/order code is `{self.queue_number}`."
+                f"Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
             )
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
@@ -87,19 +131,21 @@ class ConfirmPaymentView(discord.ui.View):
     @discord.ui.button(label="Reject Payment", style=discord.ButtonStyle.danger)
     async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
         staff = interaction.user
+        update_queue_status(self.queue_code, "rejected")
+        queue_number = get_queue_number_by_code(self.queue_code)
         await interaction.response.send_message(
             f"Order at {self.ticket_channel.mention} was rejected by {staff.mention}.", ephemeral=False
         )
         await self.ticket_channel.send(
             f"{self.user.mention} your payment for {self.item_name} was **rejected** by {staff.mention}.\n"
             f"Please try `/confirm` again with a valid screenshot, or your ticket will expire and be archived within 15 minutes.\n"
-            f"Your queue/order code is `{self.queue_number}`."
+            f"Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
         )
         try:
             await self.user.send(
                 f"Your payment for **{self.item_name or 'your item'}** was rejected by {staff.mention}.\n"
                 f"Please try `/confirm` again with a valid screenshot, or your ticket will expire and be archived within 15 minutes.\n"
-                f"Your queue/order code is `{self.queue_number}`."
+                f"Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
             )
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
@@ -107,22 +153,28 @@ class ConfirmPaymentView(discord.ui.View):
     @discord.ui.button(label="Processing", style=discord.ButtonStyle.secondary)
     async def processing(self, interaction: discord.Interaction, button: discord.ui.Button):
         staff = interaction.user
+        update_queue_status(self.queue_code, "processing")
+        queue_number = get_queue_number_by_code(self.queue_code)
         await interaction.response.send_message(
             f"Order at {self.ticket_channel.mention} is now being processed by {staff.mention}.", ephemeral=False
         )
         await self.ticket_channel.send(
             f"{self.user.mention} your payment for {self.item_name} is now **being processed** by {staff.mention}.\n"
             f"Please wait while your order is handled.\n"
-            f"Your queue/order code is `{self.queue_number}`."
+            f"Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
         )
         try:
             await self.user.send(
                 f"Your payment for **{self.item_name or 'your item'}** is now being processed by {staff.mention}.\n"
                 f"Please wait while your order is handled.\n"
-                f"Your queue/order code is `{self.queue_number}`."
+                f"Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
             )
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
+        # Remove ticket timeout by cancelling the delete task if possible
+        if hasattr(self.ticket_channel, "ticket_timeout_task") and self.ticket_channel.ticket_timeout_task:
+            self.ticket_channel.ticket_timeout_task.cancel()
+            await self.ticket_channel.send("Ticket timeout has been removed. This ticket will remain open until manually archived.")
 
 class ItemButton(discord.ui.Button):
     # List of pastel hex color codes for buttons
@@ -225,12 +277,16 @@ class Cashmoney(commands.Cog, name="cashmoney"):
     async def ticket(self, context: Context) -> None:
         guild = context.guild
         requester = context.author
-        ref_ID = time.time()  # Use current time as reference ID
         category = discord.utils.get(guild.categories, name=TICKET_CATEGORY_NAME)
         if not category:
             category = await guild.create_category(name=TICKET_CATEGORY_NAME)
 
-        channel_name = requester.name.lower().replace(" ", "-") + "s-ticket-" + str(int(ref_ID))
+        # Use dynamic queue string instead of numeric
+        queue_code = generate_dynamic_queue()
+        queue_number = register_queue(context.author.id, queue_code)
+
+        # Change channel name to use queue_code instead of timecode
+        channel_name = requester.name.lower().replace(" ", "-") + "-ticket-" + queue_code
         existing_channel = discord.utils.get(category.text_channels, name=channel_name)
         if existing_channel:
             await context.send(f"{requester.mention} {existing_channel.mention} you already got a ticket channel bruzz", ephemeral=True)
@@ -249,12 +305,11 @@ class Cashmoney(commands.Cog, name="cashmoney"):
             reason=f"Ticket channel for {requester}"
         )
 
-        # Use dynamic queue string instead of numeric
-        queue_number = generate_dynamic_queue()
+        # ...existing code...
 
         notify_channel = guild.get_channel(NOTIFY_CHANNEL_ID)
         if notify_channel:
-            await notify_channel.send(f"{requester.mention}, you have created your ticket channel at {new_channel.mention} (Queue `{queue_number}`)")
+            await notify_channel.send(f"{requester.mention}, you have created your ticket channel at {new_channel.mention} (Queue `{queue_code}` / Order #{queue_number})")
 
         stock = load_stock()
         embed = discord.Embed(
@@ -269,7 +324,7 @@ class Cashmoney(commands.Cog, name="cashmoney"):
             )
         embed.add_field(
             name="Order Instructions",
-            value=f"{requester.name}, send payment to `{GCASH_NUMBER}` after choosing below.\nThis ticket will explode in 15 minutes.\nQueue/Order Code: `{queue_number}`",
+            value=f"{requester.name}, send payment to `{GCASH_NUMBER}` after choosing below.\nThis ticket will explode in 15 minutes.\nQueue/Order Code: `{queue_code}` (Order #{queue_number})",
             inline=False
         )
         await new_channel.send(
@@ -284,9 +339,12 @@ class Cashmoney(commands.Cog, name="cashmoney"):
         # Store queue code for later use in confirm
         if not hasattr(self.bot, "queue_numbers"):
             self.bot.queue_numbers = {}
-        self.bot.queue_numbers[requester.id] = queue_number
-        await asyncio.sleep(TICKET_TIMEOUT)
-        await new_channel.delete(reason="Ticket expired")
+        self.bot.queue_numbers[requester.id] = queue_code
+        # Store the asyncio task for timeout so it can be cancelled
+        async def ticket_timeout():
+            await asyncio.sleep(TICKET_TIMEOUT)
+            await new_channel.delete(reason="Ticket expired")
+        new_channel.ticket_timeout_task = asyncio.create_task(ticket_timeout())
 
     @commands.hybrid_command(name="confirm", description="Confirm your payment by uploading your screenshot")
     @discord.app_commands.describe(screenshot="Upload your GCash screenshot")
@@ -311,7 +369,8 @@ class Cashmoney(commands.Cog, name="cashmoney"):
         item_name = selected["item_name"]
         quantity = selected["quantity"]
         total_price = selected["total_price"]
-        queue_number = getattr(self.bot, "queue_numbers", {}).get(requester.id, "N/A")
+        queue_code = getattr(self.bot, "queue_numbers", {}).get(requester.id, "N/A")
+        queue_number = get_queue_number_by_code(queue_code)
 
         staff_channel = ctx.guild.get_channel(STAFF_CHANNEL_ID)
         if staff_channel:
@@ -322,14 +381,14 @@ class Cashmoney(commands.Cog, name="cashmoney"):
                     f"Item: **{item_name}**\n"
                     f"Quantity: **{quantity}**\n"
                     f"Total: **₱{total_price}**\n"
-                    f"Queue/Order Code: `{queue_number}`"
+                    f"Queue/Order Code: `{queue_code}` (Order #{queue_number})"
                 ),
                 color=discord.Color.green()
             )
             embed.set_image(url=image_url)
             await staff_channel.send(
                 embed=embed,
-                view=ConfirmPaymentView(requester, ctx.channel, image_url, item_name, queue_number)
+                view=ConfirmPaymentView(requester, ctx.channel, image_url, item_name, queue_code)
             )
             await ctx.reply("Screenshot sent to the staff for confirmation.")
         else:
