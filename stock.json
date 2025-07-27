@@ -1,17 +1,77 @@
 {
     "Item X": {
         "price": 69,
-        "stock": 228,
+        "stock": 224,
         "description": "i loev rohan"
     },
     "Item Y": {
         "price": 420,
-        "stock": 308,
+        "stock": 212,
         "description": "i love rohan"
     },
     "Item Z": {
         "price": 200,
-        "stock": 64,
+        "stock": 62,
         "description": "WAAAAAAAAAAAAAAAAAAAAAAAAAaa"
+    },
+    "Item A": {
+        "price": 150,
+        "stock": 50,
+        "description": "Sample item A"
+    },
+    "Item B": {
+        "price": 99,
+        "stock": 100,
+        "description": "Sample item B"
+    },
+    "Item C": {
+        "price": 250,
+        "stock": 80,
+        "description": "Sample item C"
+    },
+    "Item D": {
+        "price": 300,
+        "stock": 18,
+        "description": "Sample item D"
+    },
+    "Item E": {
+        "price": 120,
+        "stock": 75,
+        "description": "Sample item E"
+    },
+    "Item F": {
+        "price": 180,
+        "stock": 60,
+        "description": "Sample item F"
+    },
+    "Item G": {
+        "price": 210,
+        "stock": 40,
+        "description": "Sample item G"
+    },
+    "Item H": {
+        "price": 350,
+        "stock": 25,
+        "description": "Sample item H"
+    },
+    "Item I": {
+        "price": 80,
+        "stock": 90,
+        "description": "Sample item I"
+    },
+    "Item J": {
+        "price": 400,
+        "stock": 20,
+        "description": "Sample item J"
+    },
+    "Item K": {
+        "price": 500,
+        "stock": 10,
+        "description": "Sample item K"
+    },
+    "Item L": {
+        "price": 60,
+        "stock": 200,
+        "description": "Sample item L"
     }
 }

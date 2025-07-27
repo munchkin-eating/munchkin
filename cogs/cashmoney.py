@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import time
+import random
 
 STOCK_FILE = "stock.json" # Path to your itemlist
 GCASH_NUMBER = "09610617355" # Gcash number for payments
@@ -17,6 +18,8 @@ PERSISTENT_MESSAGE_CHANNEL_ID = 1398181590902767626
 PERSISTENT_MESSAGE_ID_FILE = "ticket_button_message_id.txt" 
 NOTIFY_CHANNEL_ID = 1398698611935809626  
 
+ORDER_QUEUE_FILE = "order_queue.txt" # Add a global queue counter
+
 def load_stock():
     with open(STOCK_FILE, "r") as f:
         return json.load(f)
@@ -25,27 +28,42 @@ def save_stock(stock):
     with open(STOCK_FILE, "w") as f:
         json.dump(stock, f, indent=4)
 
+def get_next_queue_number():
+    if not os.path.exists(ORDER_QUEUE_FILE):
+        with open(ORDER_QUEUE_FILE, "w") as f:
+            f.write("1")
+        return 1
+    with open(ORDER_QUEUE_FILE, "r+") as f:
+        num = int(f.read().strip())
+        f.seek(0)
+        f.write(str(num + 1))
+        f.truncate()
+        return num
+
 class ConfirmPaymentView(discord.ui.View):
-    def __init__(self, user: discord.User, ticket_channel: discord.TextChannel, image_url=None, item_name=None):
+    def __init__(self, user: discord.User, ticket_channel: discord.TextChannel, image_url=None, item_name=None, queue_number=None):
         super().__init__(timeout=300)
         self.user = user
         self.ticket_channel = ticket_channel
         self.image_url = image_url
         self.item_name = item_name
+        self.queue_number = queue_number
 
     @discord.ui.button(label="Confirm Payment", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != GCASH_OWNER_ID:
-            await interaction.response.send_message("You're not authorized to confirm this.", ephemeral=True)
-            return
-
-        await interaction.response.send_message("Payment confirmed. <3", ephemeral=False)
-        await self.ticket_channel.send(f"{self.user.mention} your payment has been confirmed! God bless you!!")
-
+        staff = interaction.user
+        await interaction.response.send_message(
+            f"Payment confirmed by {staff.mention}. <3", ephemeral=False
+        )
+        await self.ticket_channel.send(
+            f"{self.user.mention} your payment has been confirmed by {staff.mention}! God bless you!!\n"
+            f"Your queue/order number is **#{self.queue_number}**."
+        )
         try:
             await self.user.send(
-                f"Your payment for **{self.item_name or 'your item'}** has been confirmed!\n"
-                f"Thank you for your purchase. God bless you!"
+                f"Your payment for **{self.item_name or 'your item'}** has been confirmed by {staff.mention}!\n"
+                f"Thank you for your purchase. God bless you!\n"
+                f"Your queue/order number is **#{self.queue_number}**."
             )
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
@@ -59,25 +77,49 @@ class ConfirmPaymentView(discord.ui.View):
         await self.ticket_channel.send("This ticket has been archived.")
         self.stop()
 
-class ItemSelectView(discord.ui.View):
-    def __init__(self, requester: discord.User, bot: commands.Bot):
-        super().__init__(timeout=None)
-        self.requester = requester
-        self.bot = bot
-        self.stock = load_stock()
-        for name, data in self.stock.items():
-            label = f"{name} - ₱{data['price']}"
-            disabled = data["stock"] <= 0
-            if disabled:
-                label += " (Out of stock)"
-            self.add_item(ItemButton(label, name, disabled, requester, bot))
+    ################# REJECTION SYSTEM #################################
+    @discord.ui.button(label="Reject Payment", style=discord.ButtonStyle.danger)
+    async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
+        staff = interaction.user
+        await interaction.response.send_message(
+            f"Order at {self.ticket_channel.mention} was rejected by {staff.mention}.", ephemeral=False
+        )
+        await self.ticket_channel.send(
+            f"{self.user.mention} your payment for {self.item_name} was **rejected** by {staff.mention}.\n"
+            f"Please try `/confirm` again with a valid screenshot, or your ticket will expire and be archived within 15 minutes.\n"
+            f"Your queue/order number is **#{self.queue_number}**."
+        )
+        try:
+            await self.user.send(
+                f"Your payment for **{self.item_name or 'your item'}** was rejected by {staff.mention}.\n"
+                f"Please try `/confirm` again with a valid screenshot, or your ticket will expire and be archived within 15 minutes.\n"
+                f"Your queue/order number is **#{self.queue_number}**."
+            )
+        except discord.Forbidden:
+            await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
 
 class ItemButton(discord.ui.Button):
+    # List of pastel hex color codes for buttons
+    PASTEL_HEX_COLORS = [
+        0xFFD1DC, # pastel pink
+        0xB5EAD7, # pastel green
+        0xC7CEEA, # pastel blue
+        0xFFDAC1, # pastel peach
+        0xE2F0CB, # pastel mint
+        0xFFFACD, # pastel lemon
+        0xD5CFE1, # pastel lavender
+        0xF3FFE3, # pastel white-green
+        0xE0BBE4, # pastel purple
+        0xFFB7B2, # pastel coral
+    ]
+
     def __init__(self, label, item_name, disabled, requester, bot):
-        super().__init__(label=label, style=discord.ButtonStyle.primary, custom_id=item_name, disabled=disabled)
+        hex_color = random.choice(ItemButton.PASTEL_HEX_COLORS)
+        super().__init__(label=label, style=discord.ButtonStyle.primary, custom_id=f"{item_name}:{hex_color}", disabled=disabled)
         self.item_name = item_name
         self.requester = requester
         self.bot = bot
+        self.hex_color = hex_color
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.requester.id:
@@ -110,9 +152,11 @@ class ItemButton(discord.ui.Button):
             quantity = int(msg.content)
             if quantity <= 0:
                 await interaction.channel.send("Quantity must be at least 1.")
+                await interaction.channel.send("Please press the button again to restart your order.")
                 return
             if item["stock"] < quantity:
                 await interaction.channel.send(f"Not enough stock! Only {item['stock']} left.")
+                await interaction.channel.send("Please press the button again to restart your order.")
                 return
 
             item["stock"] -= quantity
@@ -133,6 +177,19 @@ class ItemButton(discord.ui.Button):
             )
         except asyncio.TimeoutError:
             await interaction.channel.send("Timed out waiting for quantity. Please press the button again to restart your order.")
+
+class ItemSelectView(discord.ui.View):
+    def __init__(self, requester: discord.User, bot: commands.Bot):
+        super().__init__(timeout=None)
+        self.requester = requester
+        self.bot = bot
+        self.stock = load_stock()
+        for name, data in self.stock.items():
+            label = f"{name} - ₱{data['price']}"
+            disabled = data["stock"] <= 0
+            if disabled:
+                label += " (Out of stock)"
+            self.add_item(ItemButton(label, name, disabled, requester, bot))
 
 class Cashmoney(commands.Cog, name="cashmoney"):
     def __init__(self, bot) -> None:
@@ -166,22 +223,41 @@ class Cashmoney(commands.Cog, name="cashmoney"):
             reason=f"Ticket channel for {requester}"
         )
 
+        queue_number = get_next_queue_number()
+
         notify_channel = guild.get_channel(NOTIFY_CHANNEL_ID)
         if notify_channel:
-            await notify_channel.send(f"{requester.mention}, you have created your ticket channel at {new_channel.mention}")
+            await notify_channel.send(f"{requester.mention}, you have created your ticket channel at {new_channel.mention} (Queue #{queue_number})")
 
         stock = load_stock()
-        formatted_items = "\n".join(
-            f"**{name}** - ₱{data['price']}\n> {data.get('description', 'No description')}"
-            for name, data in stock.items()
+        embed = discord.Embed(
+            title="Available Items",
+            color=0xEAEBD0
+        )
+        for name, data in stock.items():
+            embed.add_field(
+                name=f"{name} - ₱{data['price']}",
+                value=data.get('description', 'No description'),
+                inline=False
+            )
+        embed.add_field(
+            name="Order Instructions",
+            value=f"{requester.name}, send payment to `{GCASH_NUMBER}` after choosing below.\nThis ticket will explode in 15 minutes.\nQueue/Order Number: #{queue_number}",
+            inline=False
         )
         await new_channel.send(
-            f"**Available Items:**\n{formatted_items}\n\n"
-            f"{requester.mention} Send payment to `{GCASH_NUMBER}` after choosing below. This ticket will explode in 15 minutes.",
+            embed=embed,
             view=ItemSelectView(requester, self.bot)
         )
 
+        await new_channel.send(
+            f"{requester.mention}, your order ticket has been created! Please select an item above to start your order."
+        )
         await new_channel.send(file=discord.File("assets/QR.jpg"))
+        # Store queue number for later use in confirm
+        if not hasattr(self.bot, "queue_numbers"):
+            self.bot.queue_numbers = {}
+        self.bot.queue_numbers[requester.id] = queue_number
         await asyncio.sleep(TICKET_TIMEOUT)
         await new_channel.delete(reason="Ticket expired")
 
@@ -208,6 +284,7 @@ class Cashmoney(commands.Cog, name="cashmoney"):
         item_name = selected["item_name"]
         quantity = selected["quantity"]
         total_price = selected["total_price"]
+        queue_number = getattr(self.bot, "queue_numbers", {}).get(requester.id, "N/A")
 
         staff_channel = ctx.guild.get_channel(STAFF_CHANNEL_ID)
         if staff_channel:
@@ -217,14 +294,15 @@ class Cashmoney(commands.Cog, name="cashmoney"):
                     f"{requester.mention} submitted a payment in {ctx.channel.mention}\n"
                     f"Item: **{item_name}**\n"
                     f"Quantity: **{quantity}**\n"
-                    f"Total: **₱{total_price}**"
+                    f"Total: **₱{total_price}**\n"
+                    f"Queue/Order Number: **#{queue_number}**"
                 ),
                 color=discord.Color.green()
             )
             embed.set_image(url=image_url)
             await staff_channel.send(
                 embed=embed,
-                view=ConfirmPaymentView(requester, ctx.channel, image_url, item_name)
+                view=ConfirmPaymentView(requester, ctx.channel, image_url, item_name, queue_number)
             )
             await ctx.reply("Screenshot sent to the staff for confirmation.")
         else:
