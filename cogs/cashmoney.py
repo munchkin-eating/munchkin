@@ -93,7 +93,10 @@ def update_queue_status(code, status):
             break
     save_queue_info(queue_info)
 
-# ...existing code...
+def remove_queue_by_code(code):
+    queue_info = load_queue_info()
+    queue_info = [q for q in queue_info if q["code"] != code]
+    save_queue_info(queue_info)
 
 class ConfirmPaymentView(discord.ui.View):
     def __init__(self, user: discord.User, ticket_channel: discord.TextChannel, image_url=None, item_name=None, queue_code=None):
@@ -126,6 +129,9 @@ class ConfirmPaymentView(discord.ui.View):
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
 
+        # Remove from queue when completed
+        remove_queue_by_code(self.queue_code)
+
         archive_category = discord.utils.get(self.ticket_channel.guild.categories, name=ARCHIVE_CATEGORY_NAME)
         if not archive_category:
             archive_category = await self.ticket_channel.guild.create_category(ARCHIVE_CATEGORY_NAME)
@@ -138,7 +144,7 @@ class ConfirmPaymentView(discord.ui.View):
     ################# REJECTION SYSTEM #################################
     @discord.ui.button(label="Reject Payment", style=discord.ButtonStyle.danger)
     async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
-        staff = interaction.user
+        staff = interaction.user.display_name
         update_queue_status(self.queue_code, "rejected")
         queue_number = get_queue_number_by_code(self.queue_code)
         await interaction.response.send_message(
@@ -158,9 +164,9 @@ class ConfirmPaymentView(discord.ui.View):
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
 
-    @discord.ui.button(label="Processing", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Processing", style=discord.ButtonStyle.primary)
     async def processing(self, interaction: discord.Interaction, button: discord.ui.Button):
-        staff = interaction.user
+        staff = interaction.user.display_name
         update_queue_status(self.queue_code, "processing")
         queue_number = get_queue_number_by_code(self.queue_code)
         await interaction.response.send_message(
@@ -173,7 +179,7 @@ class ConfirmPaymentView(discord.ui.View):
         )
         try:
             await self.user.send(
-                f"Your payment for **{self.item_name or 'your item'}** is now being processed by {staff.mention}.\n"
+                f"Your payment for **{self.item_name or 'your item'}** is now being processed by {staff}.\n"
                 f"Please wait while your order is handled.\n"
                 f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
             )
@@ -186,6 +192,28 @@ class ConfirmPaymentView(discord.ui.View):
             if task:
                 task.cancel()
                 await self.ticket_channel.send("Ticket timeout has been removed. This ticket will remain open until manually archived.")
+
+    @discord.ui.button(label="Eliminate Order", style=discord.ButtonStyle.danger)
+    async def eliminate(self, interaction: discord.Interaction, button: discord.ui.Button):
+        staff = interaction.user.display_name
+        remove_queue_by_code(self.queue_code)
+        await interaction.response.send_message(
+            f"Order eliminated by {staff}. Ticket will be archived.", ephemeral=False
+        )
+        await self.ticket_channel.send(
+            f"{self.user.mention} your order has been **eliminated** by {staff}. This ticket will now be archived."
+        )
+        await self.user.send(
+            f"{self.user.mention} your order has been **eliminated** by {staff}. This ticket will now be archived."
+        )
+        archive_category = discord.utils.get(self.ticket_channel.guild.categories, name=ARCHIVE_CATEGORY_NAME)
+        if not archive_category:
+            archive_category = await self.ticket_channel.guild.create_category(ARCHIVE_CATEGORY_NAME)
+        await asyncio.sleep(5)
+        await self.ticket_channel.edit(category=archive_category)
+        await self.ticket_channel.set_permissions(self.user, overwrite=None)
+        await self.ticket_channel.send("This ticket has been archived.")
+        self.stop()
 
 class ItemButton(discord.ui.Button):
     # List of pastel hex color codes for buttons
@@ -225,7 +253,7 @@ class ItemButton(discord.ui.Button):
         await interaction.response.send_message(
             f"You selected **{self.item_name}**.\n"
             f"Description: *{item.get('description', 'No description')}*\n"
-            f"How many do you want to order? Please reply with a number.",
+            f"How many do you want to order? Please **reply to this message** with a number.",
             ephemeral=False
         )
 
@@ -390,7 +418,7 @@ class Cashmoney(commands.Cog, name="cashmoney"):
         if staff_channel:
             role_mention = f"<@&1398978392744792084>" # ORDER HANDLER ROLE ID
             embed = discord.Embed(
-                title=f"GCash Payment Confirmation",
+                title=f"(#{queue_number})[{queue_code}] {requester.display_name}'s Payment Confirmation for {ctx.channel.mention}",
                 description=(
                     f"{requester.mention} submitted a payment in {ctx.channel.mention}\n"
                     f"Item: **{item_name}**\n"
@@ -401,6 +429,7 @@ class Cashmoney(commands.Cog, name="cashmoney"):
                 color=discord.Color.green()
             )
             embed.set_image(url=image_url)
+            embed.set_thumbnail(url=requester.display_avatar.url)
             await staff_channel.send(
                 embed=embed,
                 view=ConfirmPaymentView(requester, ctx.channel, image_url, item_name, queue_code),
@@ -456,6 +485,7 @@ class TicketButtonView(discord.ui.View):
         ctx = await self.bot.get_context(interaction.message)
         ctx.author = interaction.user
         await self.bot.get_cog("cashmoney").ticket(ctx)
+        await interaction.response.defer()
 
 async def setup(bot) -> None:
     await bot.add_cog(Cashmoney(bot))

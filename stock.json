@@ -21,7 +21,7 @@
     },
     "Item B": {
         "price": 99,
-        "stock": 100,
+        "stock": 97,
         "description": "Sample item B"
     },
     "Item C": {
@@ -31,12 +31,12 @@
     },
     "Item D": {
         "price": 300,
-        "stock": 4,
+        "stock": 2,
         "description": "Sample item D"
     },
     "Item E": {
         "price": 120,
-        "stock": 6,
+        "stock": 2,
         "description": "Sample item E"
     },
     "Item F": {
@@ -56,12 +56,12 @@
     },
     "Item I": {
         "price": 80,
-        "stock": 81,
+        "stock": 77,
         "description": "Sample item I"
     },
     "Item J": {
         "price": 400,
-        "stock": 20,
+        "stock": 13,
         "description": "Sample item J"
     },
     "Item K": {
