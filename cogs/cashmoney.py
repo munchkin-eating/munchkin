@@ -98,6 +98,26 @@ class ConfirmPaymentView(discord.ui.View):
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
 
+    @discord.ui.button(label="Processing", style=discord.ButtonStyle.secondary)
+    async def processing(self, interaction: discord.Interaction, button: discord.ui.Button):
+        staff = interaction.user
+        await interaction.response.send_message(
+            f"Order at {self.ticket_channel.mention} is now being processed by {staff.mention}.", ephemeral=False
+        )
+        await self.ticket_channel.send(
+            f"{self.user.mention} your payment for {self.item_name} is now **being processed** by {staff.mention}.\n"
+            f"Please wait while your order is handled.\n"
+            f"Your queue/order number is **#{self.queue_number}**."
+        )
+        try:
+            await self.user.send(
+                f"Your payment for **{self.item_name or 'your item'}** is now being processed by {staff.mention}.\n"
+                f"Please wait while your order is handled.\n"
+                f"Your queue/order number is **#{self.queue_number}**."
+            )
+        except discord.Forbidden:
+            await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
+
 class ItemButton(discord.ui.Button):
     # List of pastel hex color codes for buttons
     PASTEL_HEX_COLORS = [
