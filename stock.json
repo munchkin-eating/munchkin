@@ -16,7 +16,7 @@
     },
     "Item A": {
         "price": 150,
-        "stock": 50,
+        "stock": 46,
         "description": "Sample item A"
     },
     "Item B": {
@@ -26,7 +26,7 @@
     },
     "Item C": {
         "price": 250,
-        "stock": 80,
+        "stock": 76,
         "description": "Sample item C"
     },
     "Item D": {
@@ -36,7 +36,7 @@
     },
     "Item E": {
         "price": 120,
-        "stock": 2,
+        "stock": 0,
         "description": "Sample item E"
     },
     "Item F": {
@@ -46,17 +46,17 @@
     },
     "Item G": {
         "price": 210,
-        "stock": 40,
+        "stock": 29,
         "description": "Sample item G"
     },
     "Item H": {
         "price": 350,
-        "stock": 25,
+        "stock": 22,
         "description": "Sample item H"
     },
     "Item I": {
         "price": 80,
-        "stock": 77,
+        "stock": 75,
         "description": "Sample item I"
     },
     "Item J": {
@@ -71,7 +71,7 @@
     },
     "Item L": {
         "price": 60,
-        "stock": 200,
+        "stock": 188,
         "description": "Sample item L"
     }
 }
