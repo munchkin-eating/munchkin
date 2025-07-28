@@ -9,7 +9,7 @@ import random
 import string
 
 STOCK_FILE = "stock.json" # Path to your itemlist
-GCASH_NUMBER = "09610617355" # Gcash number for payments
+GCASH_NUMBER = "09335075624" # Gcash number for payments
 GCASH_OWNER_ID = 762976863689113600 #[DEPRACATED] dati kasi magddm lang yung bot sa owner 
 TICKET_TIMEOUT = 900 # 15 minutes
 TICKET_CATEGORY_NAME = "Tickets"
