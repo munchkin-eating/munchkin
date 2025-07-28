@@ -157,6 +157,7 @@ class DiscordBot(commands.Bot):
         self.logger.info(f"Python version: {platform.python_version()}")
         self.logger.info(
             f"Running on: {platform.system()} {platform.release()} ({os.name})"
+            f"nigga"
         )
         self.logger.info("-------------------")
         await self.init_db()
