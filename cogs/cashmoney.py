@@ -18,6 +18,7 @@ STAFF_CHANNEL_ID = 1398173714733862942
 PERSISTENT_MESSAGE_CHANNEL_ID = 1398181590902767626
 PERSISTENT_MESSAGE_ID_FILE = "ticket_button_message_id.txt" 
 NOTIFY_CHANNEL_ID = 1398979639870881912
+HANDLER_ROLE = 1398978392744792084
 
 ORDER_QUEUE_FILE = "order_queue.txt" # Add a global queue counter
 LOG_CHANNEL_ID = 1399302081155698750 
@@ -26,39 +27,39 @@ QUEUE_INFO_FILE = "queue_info.json"
 
 
 
-def load_stock():
+def l_JsonStock():
     with open(STOCK_FILE, "r") as f:
         return json.load(f)
 
-def save_stock(stock):
+def s_JsonStock(stock):
     with open(STOCK_FILE, "w") as f:
         json.dump(stock, f, indent=4)
 
-def load_queue_info():
+def l_qInfo():
     if not os.path.exists(QUEUE_INFO_FILE):
         return []
     with open(QUEUE_INFO_FILE, "r") as f:
         return json.load(f)
 
-def save_queue_info(queue_info):
+def s_qInfo(queue_info):
     with open(QUEUE_INFO_FILE, "w") as f:
         json.dump(queue_info, f, indent=4)
 
-def generate_dynamic_queue():
+def genQcode():
     # Generates a queue string like "A1B2C3" using random letters and digits
     chars = string.ascii_uppercase + string.digits
     return ''.join(random.choices(chars, k=6))
 
 def get_next_queue_number():
-    queue_info = load_queue_info()
+    queue_info = l_qInfo()
     return len(queue_info) + 1
 
 def register_queue(user_id, code, status="pending"):
-    queue_info = load_queue_info()
+    queue_info = l_qInfo()
     # Ensure queue code is unique
     if any(q["code"] == code for q in queue_info):
-        # If code exists, generate a new one recursively
-        return register_queue(user_id, generate_dynamic_queue(), status)
+        return register_queue(user_id, genQcode(), status)
+    
     # Find the lowest available number (fill gaps if any)
     used_numbers = {q["number"] for q in queue_info}
     number = 1
@@ -70,35 +71,35 @@ def register_queue(user_id, code, status="pending"):
         "user_id": user_id,
         "status": status
     })
-    save_queue_info(queue_info)
+    s_qInfo(queue_info)
     return number
 
 def get_queue_number_by_code(code):
-    queue_info = load_queue_info()
+    queue_info = l_qInfo()
     for q in queue_info:
         if q["code"] == code:
             return q["number"]
     return None
 
 def get_queue_status_by_code(code):
-    queue_info = load_queue_info()
+    queue_info = l_qInfo()
     for q in queue_info:
         if q["code"] == code:
             return q["status"]
     return "pending"
 
 def update_queue_status(code, status):
-    queue_info = load_queue_info()
+    queue_info = l_qInfo()
     for q in queue_info:
         if q["code"] == code:
             q["status"] = status
             break
-    save_queue_info(queue_info)
+    s_qInfo(queue_info)
 
 def remove_queue_by_code(code):
-    queue_info = load_queue_info()
+    queue_info = l_qInfo()
     queue_info = [q for q in queue_info if q["code"] != code]
-    save_queue_info(queue_info)
+    s_qInfo(queue_info)
 
 def get_timestamp():
     return f"<t:{int(time.time())}:R>"
@@ -262,7 +263,7 @@ class ItemButton(discord.ui.Button):
             await interaction.response.send_message("Only use these buttons", ephemeral=True)
             return
 
-        stock = load_stock()
+        stock = l_JsonStock()
         item = stock[self.item_name]
         if item["stock"] <= 0:
             await interaction.response.send_message("WAAAAAAAA THIS ITEM IS OUT OF STOCK", ephemeral=True)
@@ -296,7 +297,7 @@ class ItemButton(discord.ui.Button):
                 return
 
             item["stock"] -= quantity
-            save_stock(stock)
+            s_JsonStock(stock)
 
             # Store selection for later confirmation
             interaction.client.selected_items = getattr(interaction.client, "selected_items", {})
@@ -319,7 +320,7 @@ class ItemSelectView(discord.ui.View):
         super().__init__(timeout=None)
         self.requester = requester
         self.bot = bot
-        self.stock = load_stock()
+        self.stock = l_JsonStock()
         for name, data in self.stock.items():
             label = f"{name} - ₱{data['price']}"
             disabled = data["stock"] <= 0
@@ -340,7 +341,7 @@ class Cashmoney(commands.Cog, name="cashmoney"):
             category = await guild.create_category(name=TICKET_CATEGORY_NAME)
 
         # Use dynamic queue string instead of numeric
-        queue_code = generate_dynamic_queue()
+        queue_code = genQcode()
         queue_number = register_queue(context.author.id, queue_code)
 
         # Use a base channel name for comparison (without queue code)
@@ -357,7 +358,7 @@ class Cashmoney(commands.Cog, name="cashmoney"):
             guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True),
         }
 
-        new_channel = await guild.create_text_channel(
+        newTicketChan = await guild.create_text_channel(
             name=channel_name,
             category=category,
             overwrites=overwrites,
@@ -366,30 +367,30 @@ class Cashmoney(commands.Cog, name="cashmoney"):
 
         notify_channel = guild.get_channel(NOTIFY_CHANNEL_ID)
         if notify_channel:
-            await notify_channel.send(f"{requester.mention}, you have created your ticket channel at {new_channel.mention} (Queue `{queue_code}` / Order #{queue_number})")
+            await notify_channel.send(f"{requester.mention}, you have created your ticket channel at {newTicketChan.mention} (Queue `{queue_code}` / Order #{queue_number})")
 
-        stock = load_stock()
+        stock = l_JsonStock()
         embed = discord.Embed(
-            title=f"{requester.display_name}, your order ticket has been created! Please select an item above to start your order.",
+            title=f"{requester.display_name}, your order ticket has been created! Please select an item below to start your order.",
             color=0xEAEBD0
         )
         for name, data in stock.items():
             embed.add_field(
                 name=f"{name} - ₱{data['price']}",
                 value=data.get('description', 'No description'),
-                inline=False
+                inline=True
             )
         embed.add_field(
             name="Order Instructions",
             value=f"{requester.name}, send payment to `{GCASH_NUMBER}` after choosing below.\nThis ticket will explode in 15 minutes.\nQueue/Order Code: `{queue_code}` (Order #{queue_number})",
             inline=False
         )
-        await new_channel.send(
+        await newTicketChan.send(
             embed=embed,
             view=ItemSelectView(requester, self.bot)
         )
 
-        await new_channel.send(file=discord.File("assets/QR.jpg"))
+        await newTicketChan.send(file=discord.File("assets/QR.jpg"))
         # Store queue code for later use in confirm
         if not hasattr(self.bot, "queue_numbers"):
             self.bot.queue_numbers = {}
@@ -398,12 +399,12 @@ class Cashmoney(commands.Cog, name="cashmoney"):
         # Store the asyncio task for timeout so it can be cancelled
         async def ticket_timeout():
             await asyncio.sleep(TICKET_TIMEOUT)
-            await new_channel.delete(reason="Ticket expired")
+            await newTicketChan.delete(reason="Ticket expired")
 
         # Instead of attaching to the channel, store in a dict on the cog/bot
         if not hasattr(self.bot, "ticket_timeout_tasks"):
             self.bot.ticket_timeout_tasks = {}
-        self.bot.ticket_timeout_tasks[new_channel.id] = asyncio.create_task(ticket_timeout())
+        self.bot.ticket_timeout_tasks[newTicketChan.id] = asyncio.create_task(ticket_timeout())
 
     @commands.hybrid_command(name="confirm", description="Confirm your payment by uploading your screenshot")
     @discord.app_commands.describe(screenshot="Upload your GCash screenshot")
@@ -434,7 +435,7 @@ class Cashmoney(commands.Cog, name="cashmoney"):
         staff_channel = ctx.guild.get_channel(STAFF_CHANNEL_ID)
         log_channel = ctx.guild.get_channel(LOG_CHANNEL_ID)
         if staff_channel:
-            role_mention = f"<@&1398978392744792084>" # ORDER HANDLER ROLE ID
+            role_mention = f"<@&{HANDLER_ROLE}>" # ORDER HANDLER ROLE ID
             embed = discord.Embed(
                 title=f"(#{queue_number}) [{queue_code}] {requester.display_name}'s {quantity}x {item_name}",
                 description=
