@@ -384,7 +384,7 @@ class Cashmoney(commands.Cog, name="cashmoney"):
             value=f"{requester.name}, send payment to `{GCASH_NUMBER}` after choosing below.\nThis ticket will explode in 15 minutes.\nQueue/Order Code: `{queue_code}` (Order #{queue_number})",
             inline=False
         )
-        embed.image = discord.File("assets/QR.jpg", filename="QR.jpg")
+        embed.set_image = discord.File("assets/QR.jpg", filename="QR.jpg")
         await new_channel.send(
             embed=embed,
             view=ItemSelectView(requester, self.bot)
