@@ -370,7 +370,7 @@ class Cashmoney(commands.Cog, name="cashmoney"):
 
         stock = load_stock()
         embed = discord.Embed(
-            title="Available Items",
+            title=f"{requester.mention}, your order ticket has been created! Please select an item above to start your order.",
             color=0xEAEBD0
         )
         for name, data in stock.items():
@@ -384,15 +384,11 @@ class Cashmoney(commands.Cog, name="cashmoney"):
             value=f"{requester.name}, send payment to `{GCASH_NUMBER}` after choosing below.\nThis ticket will explode in 15 minutes.\nQueue/Order Code: `{queue_code}` (Order #{queue_number})",
             inline=False
         )
+        embed.image = discord.File("assets/QR.jpg", filename="QR.jpg")
         await new_channel.send(
             embed=embed,
             view=ItemSelectView(requester, self.bot)
         )
-
-        await new_channel.send(
-            f"{requester.mention}, your order ticket has been created! Please select an item above to start your order."
-        )
-        await new_channel.send(file=discord.File("assets/QR.jpg"))
         # Store queue code for later use in confirm
         if not hasattr(self.bot, "queue_numbers"):
             self.bot.queue_numbers = {}
