@@ -343,13 +343,14 @@ class Cashmoney(commands.Cog, name="cashmoney"):
         queue_code = generate_dynamic_queue()
         queue_number = register_queue(context.author.id, queue_code)
 
-        # Change channel name to use queue_code instead of timecode
-        channel_name = requester.name.lower().replace(" ", "-") + "-ticket-" + queue_code
-        existing_channel = discord.utils.get(category.text_channels, name=channel_name)
-        if existing_channel:
-            await context.send(f"{requester.mention} {existing_channel.mention} you already got a ticket channel bruzz", ephemeral=True)
-            return
+        # Use a base channel name for comparison (without queue code)
+        base_channel_name = requester.name.lower().replace(" ", "-") + "s-ticket"
+        # Check if any channel in the category starts with the base name
+        for ch in category.text_channels:
+            if ch.name.startswith(base_channel_name):
+                return
 
+        channel_name = base_channel_name + "-" + queue_code
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             requester: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
@@ -396,10 +397,12 @@ class Cashmoney(commands.Cog, name="cashmoney"):
         if not hasattr(self.bot, "queue_numbers"):
             self.bot.queue_numbers = {}
         self.bot.queue_numbers[requester.id] = queue_code
+
         # Store the asyncio task for timeout so it can be cancelled
         async def ticket_timeout():
             await asyncio.sleep(TICKET_TIMEOUT)
             await new_channel.delete(reason="Ticket expired")
+
         # Instead of attaching to the channel, store in a dict on the cog/bot
         if not hasattr(self.bot, "ticket_timeout_tasks"):
             self.bot.ticket_timeout_tasks = {}
