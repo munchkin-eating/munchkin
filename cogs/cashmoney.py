@@ -7,12 +7,13 @@ import os
 import time
 import random
 import string
+from datetime import datetime, timedelta
 
 STOCK_FILE = "stock.json" # Path to your itemlist
 GCASH_NUMBER = "09335075624" # Gcash number for payments
 GCASH_OWNER_ID = 762976863689113600 #[DEPRACATED] dati kasi magddm lang yung bot sa owner 
-TICKET_TIMEOUT = 900 # 15 minutes
-TICKET_CATEGORY_NAME = "Tickets"
+TICKET_TIMEOUT = 60*60*60*2 # secs
+TICKET_CATEGORY_NAME = "Active Tickets"
 ARCHIVE_CATEGORY_NAME = "Archive"
 STAFF_CHANNEL_ID = 1398173714733862942
 PERSISTENT_MESSAGE_CHANNEL_ID = 1398181590902767626
@@ -59,7 +60,6 @@ def register_queue(user_id, code, status="pending"):
     # Ensure queue code is unique
     if any(q["code"] == code for q in queue_info):
         return register_queue(user_id, genQcode(), status)
-    
     # Find the lowest available number (fill gaps if any)
     used_numbers = {q["number"] for q in queue_info}
     number = 1
@@ -69,10 +69,46 @@ def register_queue(user_id, code, status="pending"):
         "code": code,
         "number": number,
         "user_id": user_id,
-        "status": status
+        "status": status,
+        "created_at": int(time.time()),
+        "last_confirm": None
     })
     s_qInfo(queue_info)
     return number
+
+def remove_queue_by_code(code):
+    queue_info = l_qInfo()
+    # Find the number of the order to be removed
+    removed_number = None
+    for q in queue_info:
+        if q["code"] == code:
+            removed_number = q["number"]
+            break
+    if removed_number is None:
+        return
+    # Remove the order
+    queue_info = [q for q in queue_info if q["code"] != code]
+    # Shift down subsequent orders
+    for q in queue_info:
+        if q["number"] > removed_number:
+            q["number"] -= 1
+    s_qInfo(queue_info)
+
+def update_queue_status(code, status):
+    queue_info = l_qInfo()
+    for q in queue_info:
+        if q["code"] == code:
+            q["status"] = status
+            break
+    s_qInfo(queue_info)
+
+def update_queue_last_confirm(code):
+    queue_info = l_qInfo()
+    for q in queue_info:
+        if q["code"] == code:
+            q["last_confirm"] = int(time.time())
+            break
+    s_qInfo(queue_info)
 
 def get_queue_number_by_code(code):
     queue_info = l_qInfo()
@@ -88,25 +124,58 @@ def get_queue_status_by_code(code):
             return q["status"]
     return "pending"
 
-def update_queue_status(code, status):
+def get_queue_last_confirm_by_code(code):
     queue_info = l_qInfo()
     for q in queue_info:
         if q["code"] == code:
-            q["status"] = status
-            break
-    s_qInfo(queue_info)
-
-def remove_queue_by_code(code):
-    queue_info = l_qInfo()
-    queue_info = [q for q in queue_info if q["code"] != code]
-    s_qInfo(queue_info)
+            return q.get("last_confirm")
+    return None
 
 def get_timestamp():
     return f"<t:{int(time.time())}:R>"
 
+# --- Timeout/Archive System Overhaul ---
+
+async def archive_expired_tickets(bot):
+    await bot.wait_until_ready()
+    while True:
+        now = int(time.time())
+        queue_info = l_qInfo()
+        expired_codes = []
+        for q in queue_info:
+            # Only archive if status is still pending or processing
+            if q.get("status") not in ("pending", "processing"):
+                continue
+            last_confirm = q.get("last_confirm")
+            created_at = q.get("created_at", now)
+            # If never confirmed, use created_at as reference
+            last_activity = last_confirm if last_confirm else created_at
+            if now - last_activity > 3 * 24 * 60 * 60:  # 3 days
+                expired_codes.append(q["code"])
+        # Archive expired tickets
+        for code in expired_codes:
+            # Find the ticket channel by code
+            for guild in bot.guilds:
+                category = discord.utils.get(guild.categories, name=TICKET_CATEGORY_NAME)
+                if not category:
+                    continue
+                for channel in category.text_channels:
+                    if code in channel.name:
+                        archive_category = discord.utils.get(guild.categories, name=ARCHIVE_CATEGORY_NAME)
+                        if not archive_category:
+                            archive_category = await guild.create_category(ARCHIVE_CATEGORY_NAME)
+                        await channel.edit(category=archive_category)
+                        await channel.set_permissions(guild.default_role, overwrite=None)
+                        await channel.send("This ticket has been archived due to inactivity (no /confirm for 3 days).")
+                        break
+            remove_queue_by_code(code)
+        await asyncio.sleep(3600)  # Check every hour
+
+# --- ConfirmPaymentView ---
+
 class ConfirmPaymentView(discord.ui.View):
     def __init__(self, user: discord.User, ticket_channel: discord.TextChannel, image_url=None, item_name=None, queue_code=None, staff_message=None):
-        super().__init__(timeout=300)
+        super().__init__(timeout=None)
         self.user = user
         self.ticket_channel = ticket_channel
         self.image_url = image_url
@@ -134,7 +203,7 @@ class ConfirmPaymentView(discord.ui.View):
             )
             await self.staff_message.edit(embed=embed)
 
-    async def log_status(self, status, staff_name):
+    async def log_Stat(self, status, staff_name):
         log_channel = self.ticket_channel.guild.get_channel(LOG_CHANNEL_ID)
         if log_channel:
             await log_channel.send(
@@ -146,22 +215,23 @@ class ConfirmPaymentView(discord.ui.View):
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         staff = interaction.user.display_name
         update_queue_status(self.queue_code, "confirmed")
+        update_queue_last_confirm(self.queue_code)
         queue_number = get_queue_number_by_code(self.queue_code)
         await self.ticket_channel.send(
             f"{self.user.mention} your payment has been confirmed by {staff}! God bless you!!\n"
-            f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
+            f">`{self.queue_code}` (Order #{queue_number})."
         )
         try:
             await self.user.send(
                 f"Your payment for **{self.item_name or 'your item'}** has been confirmed by {staff}!\n"
                 f"Thank you for your purchase. God bless you!\n"
-                f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
+                f">`{self.queue_code}` (Order #{queue_number})."
             )
         except discord.Forbidden:
-            await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
+            await self.ticket_channel.send(f"Couldn't DM {self.user.mention}")
 
         await self.update_staff_embed("Confirmed", staff)
-        await self.log_status("Confirmed", staff)
+        await self.log_Stat("Confirmed", staff)
         remove_queue_by_code(self.queue_code)
 
         archive_category = discord.utils.get(self.ticket_channel.guild.categories, name=ARCHIVE_CATEGORY_NAME)
@@ -182,19 +252,19 @@ class ConfirmPaymentView(discord.ui.View):
         await self.ticket_channel.send(
             f"{self.user.mention} your payment for {self.item_name} was **rejected** by {staff}.\n"
             f"Please try `/confirm` again with a valid screenshot, or your ticket will expire and be archived within 15 minutes.\n"
-            f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
+            f"> `{self.queue_code}` (Order #{queue_number})."
         )
         try:
             await self.user.send(
                 f"Your payment for **{self.item_name or 'your item'}** was rejected by {staff}.\n"
                 f"Please try `/confirm` again with a valid screenshot, or your ticket will expire and be archived within 15 minutes.\n"
-                f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
+                f"> `{self.queue_code}` (Order #{queue_number})."
             )
         except discord.Forbidden:
-            await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
+            await self.ticket_channel.send(f"Couldn't DM {self.user.mention}")
 
         await self.update_staff_embed("Rejected", staff)
-        await self.log_status("Rejected", staff)
+        await self.log_Stat("Rejected", staff)
 
     @discord.ui.button(label="Processing", style=discord.ButtonStyle.primary)
     async def processing(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -204,18 +274,18 @@ class ConfirmPaymentView(discord.ui.View):
         await self.ticket_channel.send(
             f"{self.user.mention} your payment for {self.item_name} is now **being processed** by {staff}.\n"
             f"Please wait while your order is handled.\n"
-            f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
+            f"> `{self.queue_code}` (Order #{queue_number})."
         )
         try:
             await self.user.send(
                 f"Your payment for **{self.item_name or 'your item'}** is now being processed by {staff}.\n"
                 f"Please wait while your order is handled.\n"
-                f"> Your queue/order code is `{self.queue_code}` (Order #{queue_number})."
+                f"> `{self.queue_code}` (Order #{queue_number})."
             )
         except discord.Forbidden:
             await self.ticket_channel.send("Couldn't DM the user — they may have DMs disabled.")
         await self.update_staff_embed("Processing", staff)
-        await self.log_status("Processing", staff)
+        await self.log_Stat("Processing", staff)
         bot = interaction.client
         if hasattr(bot, "ticket_timeout_tasks"):
             task = bot.ticket_timeout_tasks.get(self.ticket_channel.id)
@@ -234,7 +304,7 @@ class ConfirmPaymentView(discord.ui.View):
             f"{self.user.mention} your order has been **terminated** by {staff}. This ticket will now be archived."
         )
         await self.update_staff_embed("Terminated", staff)
-        await self.log_status("Terminated", staff)
+        await self.log_Stat("Terminated", staff)
         archive_category = discord.utils.get(self.ticket_channel.guild.categories, name=ARCHIVE_CATEGORY_NAME)
         if not archive_category:
             archive_category = await self.ticket_channel.guild.create_category(ARCHIVE_CATEGORY_NAME)
@@ -313,7 +383,7 @@ class ItemButton(discord.ui.Button):
                 f"Please send **₱{item['price'] * quantity}** to `{GCASH_NUMBER}` via GCash and upload the screenshot using `/confirm`."
             )
         except asyncio.TimeoutError:
-            await interaction.channel.send("Timed out waiting for quantity. Please press the button again to restart your order.")
+            await interaction.channel.send("Timed out waiting for quantity. Please choose an item again to restart your order.")
 
 class ItemSelectView(discord.ui.View):
     def __init__(self, requester: discord.User, bot: commands.Bot):
@@ -382,7 +452,7 @@ class Cashmoney(commands.Cog, name="cashmoney"):
             )
         embed.add_field(
             name="Order Instructions",
-            value=f"{requester.name}, send payment to `{GCASH_NUMBER}` after choosing below.\nThis ticket will explode in 15 minutes.\nQueue/Order Code: `{queue_code}` (Order #{queue_number})",
+            value=f"{requester.name}, send payment to `{GCASH_NUMBER}` after choosing below.\nThis ticket will explode in 15 minutes.\n`{queue_code}` (Order #{queue_number})",
             inline=False
         )
         await newTicketChan.send(
@@ -399,13 +469,15 @@ class Cashmoney(commands.Cog, name="cashmoney"):
         # Store the asyncio task for timeout so it can be cancelled
         async def ticket_timeout():
             await asyncio.sleep(TICKET_TIMEOUT)
-            await newTicketChan.delete(reason="Ticket expired")
+           # await newTicketChan.delete(reason="Ticket expired")
+            # ito ang problema 
 
-        # Instead of attaching to the channel, store in a dict on the cog/bot
+        # Instead of attaching to the channel, store in a dict on the bot
         if not hasattr(self.bot, "ticket_timeout_tasks"):
             self.bot.ticket_timeout_tasks = {}
         self.bot.ticket_timeout_tasks[newTicketChan.id] = asyncio.create_task(ticket_timeout())
 
+    #/confirm
     @commands.hybrid_command(name="confirm", description="Confirm your payment by uploading your screenshot")
     @discord.app_commands.describe(screenshot="Upload your GCash screenshot")
     async def confirm(self, ctx: Context, screenshot: discord.Attachment = None):
@@ -478,6 +550,10 @@ class Cashmoney(commands.Cog, name="cashmoney"):
     @commands.Cog.listener()
     async def on_ready(self):
         self.bot.add_view(TicketButtonView(self.bot))
+        # Start the archive expired tickets task only once
+        if not hasattr(self.bot, "_archive_expired_tickets_started"):
+            self.bot.loop.create_task(archive_expired_tickets(self.bot))
+            self.bot._archive_expired_tickets_started = True
         try:
             with open(PERSISTENT_MESSAGE_ID_FILE, "r") as f:
                 message_id = int(f.read().strip())
@@ -521,7 +597,6 @@ class TicketButtonView(discord.ui.View):
         ctx = await self.bot.get_context(interaction.message)
         ctx.author = interaction.user
         await self.bot.get_cog("cashmoney").ticket(ctx)
-        await interaction.response.defer()
 
 async def setup(bot) -> None:
     await bot.add_cog(Cashmoney(bot))

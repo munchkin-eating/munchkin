@@ -23,6 +23,8 @@ from database import DatabaseManager
 
 load_dotenv()
 
+VERSION = "Beta nigga"
+print(VERSION)
 
 intents = discord.Intents.default()
 
