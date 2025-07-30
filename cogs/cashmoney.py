@@ -481,11 +481,11 @@ class Cashmoney(commands.Cog, name="cashmoney"):
                     "• Strictly **no rushing** of orders\n"
                     "• **Different orders = different tickets**\n"
                     "• **Ask** if the item is available first\n"
-                    "• Do **not ping staff** repeatedly"
+                    "• **Do not ping staff** repeatedly"
                 ),
                 color=0xFDAEAE
             )
-            embed.set_footer(text=f"Created by 永恆的王")
+            embed.set_footer(text=f"Created by **永恆的王**")
             msg = await channel.send(embed=embed, view=TicketButtonView(self.bot))
             with open(PERSISTENT_MESSAGE_ID_FILE, "w") as f:
                 f.write(str(msg.id))
