@@ -18,6 +18,7 @@ import discord
 from discord.ext import commands, tasks
 from discord.ext.commands import Context
 from dotenv import load_dotenv
+import webserver
 
 from database import DatabaseManager
 
@@ -255,6 +256,7 @@ class DiscordBot(commands.Bot):
         else:
             raise error
 
+webserver.keep_alive()
 
 bot = DiscordBot()
 bot.run(os.getenv("TOKEN"))
