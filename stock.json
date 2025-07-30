@@ -1,7 +1,7 @@
 {
     "Item X": {
         "price": 69,
-        "stock": 224,
+        "stock": 221,
         "description": "i loev rohan"
     },
     "Item Y": {
@@ -16,12 +16,12 @@
     },
     "Item A": {
         "price": 150,
-        "stock": 46,
+        "stock": 45,
         "description": "Sample item A"
     },
     "Item B": {
         "price": 99,
-        "stock": 90,
+        "stock": 89,
         "description": "Sample item B"
     },
     "Item C": {
@@ -51,7 +51,7 @@
     },
     "Item H": {
         "price": 350,
-        "stock": 22,
+        "stock": 20,
         "description": "Sample item H"
     },
     "Item I": {
@@ -71,7 +71,7 @@
     },
     "Item L": {
         "price": 60,
-        "stock": 188,
+        "stock": 185,
         "description": "Sample item L"
     }
 }
