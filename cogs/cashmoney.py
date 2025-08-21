@@ -292,7 +292,7 @@ class TerminateChannelButton(discord.ui.Button):
             archive_category = await channel.guild.create_category(ARCHIVE_CATEGORY_NAME)
         await channel.edit(category=archive_category)
         await channel.set_permissions(channel.guild.default_role, overwrite=None)
-        await channel.send("This ticket has been terminated and archived by staff.")
+        await channel.send(f"This ticket has been terminated and archived by {interaction.user.mention}.")
         await interaction.response.send_message("Channel has been terminated and archived.", ephemeral=True)
         
 class Cashmoney(commands.Cog, name="cashmoney"):
@@ -450,6 +450,51 @@ class Cashmoney(commands.Cog, name="cashmoney"):
                 )
         else:
             await ctx.reply("Couldn't find the staff channel.")
+
+    @commands.hybrid_command(name="addstock", description="Add a new item to stock")
+    @commands.has_permissions(manage_guild=True)
+    async def add_stock(self, ctx: Context, item_name: str, price: int, quantity: int, *, description: str = ""):
+        """Add a new item to stock."""
+        stock = l_JsonStock()
+        if item_name in stock:
+            await ctx.send(f"Item `{item_name}` already exists. Use `/updatestock` to modify.", ephemeral=True)
+            return
+        stock[item_name] = {
+            "price": price,
+            "stock": quantity,
+            "description": description
+        }
+        s_JsonStock(stock)
+        await ctx.send(f"Added `{item_name}` to stock with price ₱{price}, quantity {quantity}.", ephemeral=True)
+
+    @commands.hybrid_command(name="removestock", description="Remove an item from stock")
+    @commands.has_permissions(manage_guild=True)
+    async def remove_stock(self, ctx: Context, item_name: str):
+        """Remove an item from stock."""
+        stock = l_JsonStock()
+        if item_name not in stock:
+            await ctx.send(f"Item `{item_name}` does not exist.", ephemeral=True)
+            return
+        del stock[item_name]
+        s_JsonStock(stock)
+        await ctx.send(f"Removed `{item_name}` from stock.", ephemeral=True)
+
+    @commands.hybrid_command(name="updatestock", description="Update an item's price, quantity, or description")
+    @commands.has_permissions(manage_guild=True)
+    async def update_stock(self, ctx: Context, item_name: str, price: int = None, quantity: int = None, *, description: str = None):
+        """Update an item's price, quantity, or description."""
+        stock = l_JsonStock()
+        if item_name not in stock:
+            await ctx.send(f"Item `{item_name}` does not exist.", ephemeral=True)
+            return
+        if price is not None:
+            stock[item_name]["price"] = price
+        if quantity is not None:
+            stock[item_name]["stock"] = quantity
+        if description is not None:
+            stock[item_name]["description"] = description
+        s_JsonStock(stock)
+        await ctx.send(f"Updated `{item_name}` in stock.", ephemeral=True)
 
     @commands.Cog.listener()
     async def on_ready(self):

@@ -1,77 +1,12 @@
 {
-    "Item X": {
-        "price": 69,
-        "stock": 221,
-        "description": "i loev rohan"
+    "Robux 400": {
+        "price": 249,
+        "stock": 11,
+        "description": "discounted robux"
     },
-    "Item Y": {
-        "price": 420,
-        "stock": 212,
-        "description": "i love rohan"
-    },
-    "Item Z": {
-        "price": 200,
-        "stock": 62,
-        "description": "WAAAAAAAAAAAAAAAAAAAAAAAAAaa"
-    },
-    "Item A": {
-        "price": 150,
-        "stock": 45,
-        "description": "Sample item A"
-    },
-    "Item B": {
-        "price": 99,
-        "stock": 89,
-        "description": "Sample item B"
-    },
-    "Item C": {
-        "price": 250,
-        "stock": 76,
-        "description": "Sample item C"
-    },
-    "Item D": {
-        "price": 300,
-        "stock": 2,
-        "description": "Sample item D"
-    },
-    "Item E": {
-        "price": 120,
-        "stock": 0,
-        "description": "Sample item E"
-    },
-    "Item F": {
-        "price": 180,
-        "stock": 57,
-        "description": "Sample item F"
-    },
-    "Item G": {
-        "price": 210,
-        "stock": 29,
-        "description": "Sample item G"
-    },
-    "Item H": {
-        "price": 350,
-        "stock": 20,
-        "description": "Sample item H"
-    },
-    "Item I": {
-        "price": 80,
-        "stock": 75,
-        "description": "Sample item I"
-    },
-    "Item J": {
-        "price": 400,
-        "stock": 13,
-        "description": "Sample item J"
-    },
-    "Item K": {
-        "price": 500,
-        "stock": 2,
-        "description": "Sample item K"
-    },
-    "Item L": {
-        "price": 60,
-        "stock": 185,
-        "description": "Sample item L"
+    "tangina": {
+        "price": 3432423,
+        "stock": 10,
+        "description": "tangina mo"
     }
 }

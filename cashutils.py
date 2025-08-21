@@ -12,10 +12,16 @@ ARCHIVE_CATEGORY_NAME = "Archive"
 LOG_CHANNEL_ID = 1399302081155698750
 
 def l_JsonStock():
+    print("Loading stock from", STOCK_FILE)
+    if not os.path.exists(STOCK_FILE):
+        return {}
     with open(STOCK_FILE, "r") as f:
         return json.load(f)
 
 def s_JsonStock(stock):
+    print("Savinf stock from", STOCK_FILE)
+    if not os.path.exists(STOCK_FILE):
+        return {}
     with open(STOCK_FILE, "w") as f:
         json.dump(stock, f, indent=4)
 
